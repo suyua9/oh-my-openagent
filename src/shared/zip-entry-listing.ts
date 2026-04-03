@@ -2,6 +2,43 @@ import { spawn } from "bun"
 
 import type { ArchiveEntry } from "./archive-entry-validator"
 
+function parseZipInfoListedEntry(line: string): ArchiveEntry | null {
+	const match = line.match(
+		/^([dl-])\S*\s+\S+\s+\S+\s+\d+\s+\S+\s+\d+\s+\S+\s+\S+\s+\S+\s+(.*)$/
+	)
+	if (!match) {
+		return null
+	}
+
+	const [, rawType, rawEntryPath] = match
+	return {
+		path: rawEntryPath,
+		type: rawType === "d" ? "directory" : rawType === "l" ? "symlink" : "file",
+	}
+}
+
+async function readZipSymlinkTarget(
+	archivePath: string,
+	entryPath: string
+): Promise<string | undefined> {
+	const proc = spawn(["unzip", "-p", archivePath, entryPath], {
+		stdout: "pipe",
+		stderr: "pipe",
+	})
+
+	const [exitCode, stdout, stderr] = await Promise.all([
+		proc.exited,
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	])
+
+	if (exitCode !== 0) {
+		throw new Error(`zip symlink target read failed (exit ${exitCode}): ${stderr}`)
+	}
+
+	return stdout || undefined
+}
+
 function parseTarListedZipEntry(line: string): ArchiveEntry | null {
 	const match = line.match(/^([^\s])\S*\s+\d+\s+\S+\s+\S+\s+\d+\s+\w+\s+\d+\s+(?:\d{2}:\d{2}|\d{4})\s+(.*)$/)
 	if (!match) {
@@ -46,6 +83,45 @@ export async function listZipEntriesWithTar(archivePath: string): Promise<Archiv
 		.filter(Boolean)
 		.map(line => parseTarListedZipEntry(line))
 		.filter((entry): entry is ArchiveEntry => entry !== null)
+}
+
+export async function listZipEntriesWithZipInfo(
+	archivePath: string
+): Promise<ArchiveEntry[]> {
+	const proc = spawn(["zipinfo", "-l", archivePath], {
+		stdout: "pipe",
+		stderr: "pipe",
+	})
+
+	const [exitCode, stdout, stderr] = await Promise.all([
+		proc.exited,
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+	])
+
+	if (exitCode !== 0) {
+		throw new Error(`zip entry listing failed (exit ${exitCode}): ${stderr}`)
+	}
+
+	const parsedEntries = stdout
+		.split(/\r?\n/)
+		.map(line => line.trim())
+		.filter(Boolean)
+		.map(line => parseZipInfoListedEntry(line))
+		.filter((entry): entry is ArchiveEntry => entry !== null)
+
+	return Promise.all(
+		parsedEntries.map(async entry => {
+			if (entry.type !== "symlink") {
+				return entry
+			}
+
+			return {
+				...entry,
+				linkPath: await readZipSymlinkTarget(archivePath, entry.path),
+			}
+		})
+	)
 }
 
 export async function listZipEntriesWithPowerShell(
