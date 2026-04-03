@@ -43,6 +43,11 @@ export async function extractTarGz(
   const exitCode = await proc.exited;
   if (exitCode !== 0) {
     const stderr = await new Response(proc.stderr).text();
+
+    if (/Member name contains '\.\.'/i.test(stderr) || /Removing leading [`']\.\.\//i.test(stderr)) {
+      throw new Error(`tar archive contains path traversal entries: ${stderr}`)
+    }
+
     throw new Error(`tar extraction failed (exit ${exitCode}): ${stderr}`);
   }
 }
