@@ -4,6 +4,10 @@ import { spawn } from "bun";
 import { validateArchiveEntries, type ArchiveEntry } from "./archive-entry-validator";
 import { extractZip } from "./zip-extractor";
 
+function isTarTraversalErrorOutput(output: string): boolean {
+  return /path contains '\.\.'|member name contains '\.\.'|removing leading [`'\"]?\.\.\//i.test(output)
+}
+
 export function getCachedBinaryPath(cacheDir: string, binaryName: string): string | null {
   const binaryPath = path.join(cacheDir, binaryName);
   return existsSync(binaryPath) ? binaryPath : null;
@@ -44,10 +48,9 @@ export async function extractTarGz(
   if (exitCode !== 0) {
     const stderr = await new Response(proc.stderr).text();
 
-    if (/Member name contains '\.\.'/i.test(stderr) || /Removing leading [`']\.\.\//i.test(stderr)) {
-      throw new Error(`tar archive contains path traversal entries: ${stderr}`)
+    if (isTarTraversalErrorOutput(stderr)) {
+      throw new Error(`Unsafe archive entry: path contains path traversal (${archivePath})`)
     }
-
     throw new Error(`tar extraction failed (exit ${exitCode}): ${stderr}`);
   }
 }
@@ -107,11 +110,11 @@ async function listTarEntries(archivePath: string, cwd?: string): Promise<Archiv
     new Response(proc.stderr).text(),
   ])
 
-  if (exitCode !== 0) {
-    if (/Member name contains '\.\.'/i.test(stderr) || /Removing leading [`']\.\.\//i.test(stderr)) {
-      throw new Error(`tar archive contains path traversal entries: ${stderr}`)
-    }
+  if (isTarTraversalErrorOutput(stderr)) {
+    throw new Error(`Unsafe archive entry: path contains path traversal (${archivePath})`)
+  }
 
+  if (exitCode !== 0) {
     throw new Error(`tar entry listing failed (exit ${exitCode}): ${stderr}`)
   }
 

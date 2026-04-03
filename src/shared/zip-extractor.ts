@@ -3,7 +3,9 @@ import { release } from "os"
 
 import { validateArchiveEntries } from "./archive-entry-validator"
 import {
+  isPythonZipListingAvailable,
   listZipEntriesWithPowerShell,
+  listZipEntriesWithPython,
   listZipEntriesWithTar,
   listZipEntriesWithZipInfo,
 } from "./zip-entry-listing"
@@ -100,6 +102,10 @@ async function listZipEntries(archivePath: string) {
     }
 
     return listZipEntriesWithPowerShell(archivePath, escapePowerShellPath, extractor)
+  }
+
+  if (isPythonZipListingAvailable()) {
+    return listZipEntriesWithPython(archivePath)
   }
 
   return listZipEntriesWithZipInfo(archivePath)
