@@ -196,8 +196,9 @@ export function loadPluginConfig(
   }
 
   // Load user config first (base). Parse empty config through Zod to apply field defaults.
+  const userConfig = loadConfigFromPath(userConfigPath, ctx)
   let config: OhMyOpenCodeConfig =
-    loadConfigFromPath(userConfigPath, ctx) ?? OhMyOpenCodeConfigSchema.parse({});
+    userConfig ?? OhMyOpenCodeConfigSchema.parse({});
 
   // Override with project config
   const projectConfig = loadConfigFromPath(projectConfigPath, ctx);
@@ -207,6 +208,7 @@ export function loadPluginConfig(
 
   config = {
     ...config,
+    mcp_env_allowlist: userConfig?.mcp_env_allowlist ?? [],
   };
 
   log("Final merged config", {
