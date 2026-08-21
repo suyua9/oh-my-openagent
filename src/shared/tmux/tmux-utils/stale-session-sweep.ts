@@ -16,14 +16,15 @@ async function listOmoAgentSessionsViaTmux(tmux: string): Promise<string[]> {
 		stdout: "pipe",
 		stderr: "pipe",
 	})
-	const [stdout, , exitCode] = await Promise.all([
+	const [stdout, stderr, exitCode] = await Promise.all([
 		new Response(proc.stdout).text(),
 		new Response(proc.stderr).text(),
 		proc.exited,
 	])
 
 	if (exitCode !== 0) {
-		return []
+		const detail = stderr.trim() || stdout.trim() || "no diagnostic output"
+		throw new Error(`tmux list-sessions failed with exit code ${exitCode}: ${detail}`)
 	}
 
 	return stdout

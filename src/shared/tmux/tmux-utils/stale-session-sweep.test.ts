@@ -86,6 +86,20 @@ describe("sweepStaleOmoAgentSessionsWith", () => {
 		expect(fixture.killed).toEqual([])
 	})
 
+	it("#given listing sessions fails #when sweep called #then propagates the error for the manager to retry", async () => {
+		// given
+		const error = new Error("tmux server is unavailable")
+		const deps: SweepDeps = {
+			...fixture.deps,
+			listCandidateSessions: async () => {
+				throw error
+			},
+		}
+
+		// when / then
+		await expect(sweepStaleOmoAgentSessionsWith(deps)).rejects.toBe(error)
+	})
+
 	it("#given sessions with dead PIDs #when sweep called #then each dead session is killed once", async () => {
 		// given
 		fixture.setCandidates(["omo-agents-99991", "omo-agents-99992"])
